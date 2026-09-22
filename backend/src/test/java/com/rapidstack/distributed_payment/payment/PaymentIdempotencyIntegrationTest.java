@@ -15,7 +15,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import com.rapidstack.distributed_payment.payment.entity.OutboxEvent;
 import com.rapidstack.distributed_payment.payment.entity.Payment;
+import com.rapidstack.distributed_payment.payment.repository.OutboxEventRepository;
 import com.rapidstack.distributed_payment.payment.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -41,6 +43,9 @@ class PaymentIdempotencyIntegrationTest {
     @Autowired
     PaymentRepository paymentRepository;
 
+    @Autowired
+    OutboxEventRepository outboxEventRepository;
+
     @Value("${local.server.port}")
     int port;
 
@@ -56,6 +61,24 @@ class PaymentIdempotencyIntegrationTest {
 
         assertThat(secondId).isEqualTo(firstId);
         assertThat(paymentsWithKey(key)).hasSize(1);
+    }
+
+    @Test
+    void creatingPaymentWritesOutboxEventAndReplayDoesNotDuplicate() throws Exception {
+        String key = UUID.randomUUID().toString();
+
+        long id = postPayment(key);
+        postPayment(key); // replay
+
+        List<OutboxEvent> events = outboxEventRepository.findAll().stream()
+                .filter(e -> String.valueOf(id).equals(e.getAggregateId()))
+                .toList();
+
+        assertThat(events).hasSize(1);
+        OutboxEvent event = events.get(0);
+        assertThat(event.getEventType()).isEqualTo("PaymentCreated");
+        assertThat(event.getPayload()).contains("\"paymentId\":" + id);
+        assertThat(event.getProcessedAt()).isNull();
     }
 
     @Test
