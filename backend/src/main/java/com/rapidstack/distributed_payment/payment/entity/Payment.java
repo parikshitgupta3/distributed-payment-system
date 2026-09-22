@@ -22,5 +22,8 @@ public class Payment {
 
     private String status;
 
+    @Column(name = "idempotency_key", unique = true, nullable = false)
+    private String idempotencyKey;
+
     private LocalDateTime createdAt;
 }
