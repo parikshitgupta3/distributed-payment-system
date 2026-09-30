@@ -2,9 +2,9 @@ package com.rapidstack.distributed_payment.payment.service;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.context.annotation.Lazy;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -44,17 +44,17 @@ public class PaymentService {
         payment.setStatus("PENDING");
         payment.setIdempotencyKey(idempotencyKey);
         payment.setCreatedAt(LocalDateTime.now());
-        try {
-            return self.insertNewPayment(payment);
-        } catch (DataIntegrityViolationException e) {
-            return paymentRepository.findByIdempotencyKey(idempotencyKey).orElseThrow(() -> e);
-        }
+        return self.insertNewPayment(payment);
     }
 
     public Payment insertNewPayment(Payment payment) {
         Payment saved = paymentRepository.save(payment);
         outboxEventRepository.save(paymentCreatedEvent(saved));
         return saved;
+    }
+
+    public Optional<Payment> findByIdempotencyKey(String idempotencyKey) {
+        return paymentRepository.findByIdempotencyKey(idempotencyKey);
     }
 
     public Payment getPayment(Long id) {

@@ -1,5 +1,6 @@
 package com.rapidstack.distributed_payment.payment.controller;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +25,13 @@ public class PaymentController {
     @PostMapping
     public Payment createPayment(@RequestHeader("Idempotency-Key") String idempotencyKey,
                                 @RequestBody Payment payment) {
-        return paymentService.createPayment(payment, idempotencyKey);
+        try {
+            return paymentService.createPayment(payment, idempotencyKey);
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent request with the same key won the insert race;
+            // recovery happens here, outside the failed transaction.
+            return paymentService.findByIdempotencyKey(idempotencyKey).orElseThrow(() -> e);
+        }
     }
 
     @GetMapping("/{id}")

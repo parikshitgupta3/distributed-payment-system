@@ -22,6 +22,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-flyway")
+	implementation("org.springframework.boot:spring-boot-kafka")
 	implementation("org.flywaydb:flyway-database-postgresql:12.4.0")
 	runtimeOnly("org.postgresql:postgresql")
 	compileOnly("org.projectlombok:lombok")
@@ -31,6 +32,7 @@ dependencies {
 	testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.3"))
 	testImplementation("org.testcontainers:junit-jupiter")
 	testImplementation("org.testcontainers:postgresql")
+	testImplementation("org.testcontainers:kafka")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 
 import com.rapidstack.distributed_payment.payment.entity.OutboxEvent;
 import com.rapidstack.distributed_payment.payment.entity.Payment;
+import com.rapidstack.distributed_payment.payment.kafka.PaymentEventConsumer;
 import com.rapidstack.distributed_payment.payment.repository.OutboxEventRepository;
 import com.rapidstack.distributed_payment.payment.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,8 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,11 +43,18 @@ class PaymentIdempotencyIntegrationTest {
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
 
+    @Container
+    @ServiceConnection
+    static ConfluentKafkaContainer kafka = new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.4.0"));
+
     @Autowired
     PaymentRepository paymentRepository;
 
     @Autowired
     OutboxEventRepository outboxEventRepository;
+
+    @Autowired
+    PaymentEventConsumer paymentEventConsumer;
 
     @Value("${local.server.port}")
     int port;
@@ -79,6 +89,33 @@ class PaymentIdempotencyIntegrationTest {
         assertThat(event.getEventType()).isEqualTo("PaymentCreated");
         assertThat(event.getPayload()).contains("\"paymentId\":" + id);
         assertThat(event.getProcessedAt()).isNull();
+    }
+
+    @Test
+    void paymentEventFlowsFromOutboxToKafkaAndGetsProcessed() throws Exception {
+        String key = UUID.randomUUID().toString();
+
+        long id = postPayment(key);
+
+        OutboxEvent event = null;
+        long deadline = System.currentTimeMillis() + 30_000;
+        while (System.currentTimeMillis() < deadline) {
+            event = outboxEventRepository.findAll().stream()
+                    .filter(e -> String.valueOf(id).equals(e.getAggregateId()))
+                    .findFirst()
+                    .orElse(null);
+            boolean consumed = paymentEventConsumer.getReceivedPayloads().stream()
+                    .anyMatch(p -> p.contains("\"paymentId\":" + id));
+            if (event != null && event.getProcessedAt() != null && consumed) {
+                break;
+            }
+            Thread.sleep(500);
+        }
+
+        assertThat(event).isNotNull();
+        assertThat(event.getProcessedAt()).isNotNull();
+        assertThat(paymentEventConsumer.getReceivedPayloads())
+                .anyMatch(p -> p.contains("\"paymentId\":" + id));
     }
 
     @Test
